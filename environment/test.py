@@ -96,9 +96,9 @@ class Barrel(pygame.sprite.Sprite):
             self.rect.y += self.gravity  # Simulate gravity when not on a bridge
         else:
             if bridge_index%2 == 0:  # If on an even-indexed bridge, move left
-                self.rect.x -= 4
+                self.rect.x -= 3
             else:  # If on an odd-indexed bridge, move right
-                self.rect.x += 4
+                self.rect.x += 3
        
     def check_collision_with_ladders(self):
         ladder_index = self.rect.collidelist(ladders)
