@@ -8,7 +8,7 @@ pygame.init()
 
 # init variables
 W_WIDTH = 800
-W_HEIGHT = 600
+W_HEIGHT = 800
 screen = pygame.display.set_mode((W_WIDTH, W_HEIGHT))
 pygame.display.set_caption("Barrel-ly Learning")
 clock = pygame.time.Clock()
@@ -41,11 +41,15 @@ CLIMB_SPEED = 150
 GROUND_TOLERANCE = 4    # tolerance for standing on a bridge
 LADDER_TOP_TOLERANCE = 100
 LIVES = 3
-MARIO_INITIAL = (50, 580)
+MARIO_INITIAL = (50, 780)
 GAME_OVER = 0
+SCORE = 0
 # Bridge
-bridge = pygame.Surface((750, 20))
+
+"""bridge = pygame.Surface((750, 20))
 bridge.fill((255, 0, 0))
+tiny_bridge = pygame.Surface((100,20))
+tiny_bridge.fill((255,0,0))
 
 
 bridge_rect1 = bridge.get_frect(bottomright=(W_WIDTH, W_HEIGHT))
@@ -54,6 +58,7 @@ bridge_rect3 = bridge.get_frect(topright=(800, 420))
 bridge_rect4 = bridge.get_frect(topleft=(0, 340))
 bridge_rect5 = bridge.get_frect(topright=(800, 260))
 bridge_rect6 = bridge.get_frect(topleft=(0, 180))
+bridge_rect7 = tiny_bridge.get_frect(topleft=(120, 100))
 
 bridges = [
     bridge_rect1,
@@ -61,16 +66,29 @@ bridges = [
     bridge_rect3,
     bridge_rect4,
     bridge_rect5,
-    bridge_rect6,
+    bridge_rect6
+]"""
+
+bridges = [
+    pygame.Rect(50,780,750,20),
+    pygame.Rect(0,680,750,20),
+    pygame.Rect(50,580,750,20),
+    pygame.Rect(0,480,750,20),
+    pygame.Rect(50,380,750,20),
+    pygame.Rect(0,280,750,20),
+    pygame.Rect(120,180,100,20)
+    
 ]
 
 # Ladders
 ladders = [
-    pygame.Rect(700, 500, 20, 80),
-    pygame.Rect(300, 420, 20, 80),
-    pygame.Rect(500, 340, 20, 80),
-    pygame.Rect(700, 260, 20, 80),
-    pygame.Rect(200, 180, 20, 80),
+    pygame.Rect(700, 680, 20, 100),
+    pygame.Rect(300, 580, 20, 100),
+    pygame.Rect(500, 480, 20, 100),
+    pygame.Rect(700, 380, 20, 100),
+    pygame.Rect(200, 280, 20, 100),
+    pygame.Rect(150,180,20, 100)
+    
 ]
 
 def canMarioClimb(ladders, rect):
@@ -84,6 +102,21 @@ def isOnBridge(bridges, mrect):
     probe = pygame.Rect(mrect.x, mrect.y, mrect.width, mrect.height + GROUND_TOLERANCE)
     return probe.collidelist(bridges) != -1
 
+#comment out if not needed during training
+def show_end_screen(text, color):
+    overlay = pygame.Surface((W_WIDTH, W_HEIGHT))
+    overlay.set_alpha(180)
+    overlay.fill((0, 0, 0))
+    screen.blit(overlay, (0, 0))
+
+    big_font = pygame.font.SysFont(None, 80)
+    end_text = big_font.render(text, True, color)
+    text_rect = end_text.get_rect(center=(W_WIDTH // 2, W_HEIGHT // 2))
+    screen.blit(end_text, text_rect)
+
+    score_surf = font.render(f"Final Score: {SCORE}", True, "white")
+    score_rect = score_surf.get_rect(center=(W_WIDTH // 2, W_HEIGHT // 2 + 60))
+    screen.blit(score_surf, score_rect)
 
 class Mario:
     def __init__(self,x,y):
@@ -121,7 +154,7 @@ class Mario:
         self.counter = 0
         self.image = self.right_walk[self.index]
 
-    def update(self, GAME_OVER):
+    def update(self, GAME_OVER, SCORE, all_barrels):
         walk_cooldown = 7
         dx = 0
         dy = 0
@@ -222,12 +255,31 @@ class Mario:
             if self.rect.right > W_WIDTH:
                 self.rect.right = W_WIDTH
                 dx = 0
+
+            #Scoring system
+            """if self.jumped:
+                for barrel in all_barrels:
+                    if self.rect.x == barrel.rect.x and self.rect.top == barrel.rect.bottom - 80:
+                        SCORE += 100
+                        print(SCORE)"""
+            for barrel in all_barrels:
+                if (
+                    self.jumped
+                    and not barrel.scored
+                    and abs(self.rect.centerx - barrel.rect.centerx) < 35
+                    and self.rect.bottom < barrel.rect.top + 10
+                ):
+                    SCORE += 100
+                    barrel.scored = True
             
+
+
+
         else:
             self.image = self.death_image
         #draw mario on screen
         screen.blit(self.image, self.rect)
-        return GAME_OVER
+        return GAME_OVER, SCORE
 
 class Barrel(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -243,6 +295,8 @@ class Barrel(pygame.sprite.Sprite):
         self.climb_speed = 150
         self.ladder_decision = None
         self.on_ladder = False
+
+        self.scored = False
     
     def update(self):
         self.gravity = 2  # Simulate gravity for the barrel
@@ -259,9 +313,9 @@ class Barrel(pygame.sprite.Sprite):
         else:
             self.rect.bottom = bridges[bridge_index].top
             if bridge_index%2 == 0:  # If on an even-indexed bridge, move left
-                self.rect.x -= 3
+                self.rect.x -= 2.5
             else:  # If on an odd-indexed bridge, move right
-                self.rect.x += 3
+                self.rect.x += 2.5
             
 
     def check_collision_with_ladders(self):
@@ -297,7 +351,13 @@ dk = pygame.transform.scale(pygame.image.load(sprites[11]), (60, 80))
 dkb = pygame.transform.scale(pygame.image.load(sprites[12]), (60, 80))
 dkbr = pygame.transform.flip(dkb,True, False )
 lots_of_barrels = pygame.transform.scale(pygame.image.load(sprites[17]), (50, 80))
-princess = pygame.transform.scale(pygame.image.load(sprites[13]), (45, 40))
+princess_help = pygame.transform.scale(pygame.image.load(sprites[13]), (45, 40))
+princess_help.set_colorkey("black")
+princess_love = pygame.transform.scale(pygame.image.load(sprites[14]), (45, 40))
+princess_love.set_colorkey("black")
+princess_rect = princess_help.get_frect(topleft = (130,140))
+princess_image = princess_help
+game_won = False
 dk_throwing = False
 
 
@@ -311,14 +371,14 @@ pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
 running = True
 while running:
     lives_text=font.render(f"Lives: {LIVES}", True, "white")
-
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
         
         if event.type == SPAWN_BARREL_EVENT:
-            new_barrel = Barrel(100,100)  # Spawn barrel at a fixed position (100, 100)
+            new_barrel = Barrel(100,280)  # Spawn barrel at a fixed position (100, 100)
             all_barrels.add(new_barrel)
 
             pygame.time.set_timer(SPAWN_BARREL_EVENT,random.randint(2000, 5000))
@@ -332,41 +392,82 @@ while running:
     
 
     for bridge_rect in bridges:
-        screen.blit(bridge, bridge_rect)
+        pygame.draw.rect(screen, (255,0,0), bridge_rect)
 
     for ladder in ladders:
         pygame.draw.rect(screen, (139, 69, 19), ladder)
 
     
-    screen.blit(princess, (150, 140))
+    screen.blit(princess_image, princess_rect)
 
     if dk_throwing:
-        screen.blit(dkb, (50, 100))
+        screen.blit(dkb, (50, 200))
     else:
-        screen.blit(dk, (50, 100))
-    screen.blit(lots_of_barrels, (5, 100))
+        screen.blit(dk, (50, 200))
+    screen.blit(lots_of_barrels, (5, 200))
         
-    GAME_OVER = mario.update(GAME_OVER)
-    if GAME_OVER == 0:
-        all_barrels.update()
-    all_barrels.draw(screen)
+#     GAME_OVER, SCORE = mario.update(GAME_OVER, SCORE, all_barrels)
+
+#     if not game_won and GAME_OVER==0 and mario.rect.colliderect(princess_rect):
+#             princess_image = princess_love
+#             game_won = True
+#             SCORE += 1000
+#             GAME_OVER = 1   
+#     if GAME_OVER == 0:
+#         all_barrels.update()
+#     all_barrels.draw(screen)
     
 
 
-    if GAME_OVER == -1 :
-        LIVES -= 1
-        if LIVES <= 0:
-            pygame.quit()
-            exit()
-        else:
-            mario.reset(*MARIO_INITIAL)
-            all_barrels.empty()
-            pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
-            GAME_OVER = 0
-    screen.blit(lives_text, (700,10))
+#     if GAME_OVER == -1 :
+#         LIVES -= 1
+#         if LIVES <= 0:
+#             pygame.quit()
+#             exit()
+#         else:
+#             mario.reset(*MARIO_INITIAL)
+#             all_barrels.empty()
+#             pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
+#             GAME_OVER = 0
+#     screen.blit(lives_text, (700,10))
+#     score_text = font.render(f"Score: {SCORE}", True, "white")
+#     screen.blit(score_text, (10, 10))
+
+#     clock.tick(60)
+#     pygame.display.update()
+
+
+    if GAME_OVER in (0, -1):
+            GAME_OVER, SCORE = mario.update(GAME_OVER, SCORE, all_barrels)
+            if GAME_OVER == 0:
+                all_barrels.update()
+            all_barrels.draw(screen)
+
+            if not game_won and GAME_OVER == 0 and mario.rect.colliderect(princess_rect):
+                princess_image = princess_love
+                game_won = True
+                SCORE += 1000
+                GAME_OVER = 1
+
+            if GAME_OVER == -1:
+                LIVES -= 1
+                if LIVES <= 0:
+                    GAME_OVER = -2       # terminal game-over state
+                else:
+                    mario.reset(*MARIO_INITIAL)
+                    all_barrels.empty()
+                    pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
+                    GAME_OVER = 0
+
+    if GAME_OVER == -2:
+            show_end_screen("GAME OVER", "red")
+    elif GAME_OVER == 1:
+            show_end_screen("YOU WIN!", "gold")
+    else:
+            screen.blit(lives_text, (700, 10))
+            score_text = font.render(f"Score: {SCORE}", True, "white")
+            screen.blit(score_text, (10, 10))
 
     clock.tick(60)
     pygame.display.update()
-
-pygame.quit()
  
