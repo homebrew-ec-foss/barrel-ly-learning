@@ -387,7 +387,7 @@ while running:
 
     state = get_state(mario, all_barrels, ladders,screen, CELL_SIZE, GRID_SIZE, ENV_GRID)
     state.extend([int(mario.is_climbing),int(canMarioClimb(ladders,mario.rect))])
-    print(len(state)) #to verify if %500
+    # print(len(state)) #to verify if %500
 
     
     if GAME_OVER in (0, -1):
