@@ -457,7 +457,6 @@ while running:
     #print(len(state)) #to verify if %500
     action = get_action()
 
-
     if GAME_OVER in (0, -1):
             GAME_OVER, SCORE = mario.update(GAME_OVER, SCORE, all_barrels)
             if GAME_OVER == 0:

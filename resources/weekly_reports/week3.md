@@ -8,3 +8,11 @@
 - Added grids and state-action parameters to game environment.
 - Learn pytorch and implementation of neural networks using pytorch.
 - Get started with the LfD model
+
+## Pranavika's Progress
+- added scoring system.
+- researched on the feature grids
+- learning pytorch.
+### Next week
+- add feature grids and collect dataset for LFD.
+- Learn pytorch and start with lfd model.

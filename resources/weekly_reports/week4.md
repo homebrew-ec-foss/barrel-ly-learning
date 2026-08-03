@@ -9,3 +9,11 @@
 - Train, Validate and Train the Lfd model using a suitable number of episodes
 - Debug and resolve obstructing issues in environment
 - Build an actor-critic RL framework and fine tune the Lfd model
+
+## Pranavika's Progress
+- Added feature-grids for feature extraction.
+- Collecting state-action dataset for Lfd
+
+### Next Week
+- train the lfd model
+- build the actor-critic framework.
