@@ -3,7 +3,9 @@ import random
 import pygame
 from sys import exit
 from feature_extraction import get_state
-
+import csv
+import os
+os.makedirs("data", exist_ok=True)
 pygame.init()
 
 # init variables
@@ -17,6 +19,19 @@ font = pygame.font.SysFont(None,30)
 GRID_SIZE = 7
 CELL_SIZE = 40
 ENV_GRID = 20
+
+MAX_EPISODES = 3
+episode_num = 0
+
+def new_csv_writer(ep):
+    f = open(f"../model/data/episode_{ep:03d}.csv", "w", newline="")
+    w = csv.writer(f)
+    header = [f"s{i}" for i in range(500)] + ["action", "reward"] + [f"next_s{i}" for i in range(500)]
+    w.writerow(header)
+    return f, w
+
+csv_file, writer = new_csv_writer(episode_num)
+
 
 sprites = [
     "assets/marion.png",
@@ -75,7 +90,7 @@ ladders = [
 def canMarioClimb(ladders, rect):
     for ladder in ladders:
         ladder_center_x = ladder.centerx
-        if abs(rect.centerx - ladder_center_x) <= 6:
+        if abs(rect.centerx - ladder_center_x) <= 8:
             if ladder.top <= rect.bottom <= ladder.bottom :
                 return True
     return False
@@ -319,8 +334,42 @@ class Barrel(pygame.sprite.Sprite):
         else:
             self.on_ladder = False
          
+def get_action():
+    keys = pygame.key.get_pressed()
 
+    if keys[pygame.K_LEFT] and keys[pygame.K_SPACE]:
+        return 2      
 
+    elif keys[pygame.K_RIGHT] and keys[pygame.K_SPACE]:
+        return 3      
+
+    elif keys[pygame.K_LEFT]:
+        return 0      
+
+    elif keys[pygame.K_RIGHT]:
+        return 1      
+
+    elif keys[pygame.K_UP]:
+        return 4      
+
+    elif keys[pygame.K_DOWN]:
+        return 5      
+
+    return 6          # stand still
+
+def get_reward(previous_score, current_score, previous_lives, current_lives, game_over):
+    reward = 0
+
+    if current_score > previous_score:
+        reward += current_score - previous_score
+
+    if current_lives < previous_lives:
+        reward -= 100
+
+    if game_over == 1:
+        reward += 1000
+
+    return reward
 
 # donkeykong
 dk = pygame.transform.scale(pygame.image.load(sprites[11]), (60, 80))
@@ -344,12 +393,30 @@ all_barrels = pygame.sprite.Group()
 SPAWN_BARREL_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000)) 
 
+
+# csv_file = open("dataset.csv", "w", newline="")
+# writer = csv.writer(csv_file)
+
+# header = [f"s{i}" for i in range(500)]
+# header += ["action", "reward"]
+# header += [f"next_s{i}" for i in range(500)]
+
+
+# writer.writerow(header)
+
+
+previous_score = SCORE
+previous_lives = LIVES
+FRAME_SKIP = 4
+frame_count = 0
+
 running = True
 while running:
     lives_text=font.render(f"Lives: {LIVES}", True, "white")
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            csv_file.close()
             pygame.quit()
             exit()
         
@@ -387,14 +454,17 @@ while running:
 
     state = get_state(mario, all_barrels, ladders,screen, CELL_SIZE, GRID_SIZE, ENV_GRID)
     state.extend([int(mario.is_climbing),int(canMarioClimb(ladders,mario.rect))])
-    # print(len(state)) #to verify if %500
+    #print(len(state)) #to verify if %500
+    action = get_action()
 
-    
+
     if GAME_OVER in (0, -1):
             GAME_OVER, SCORE = mario.update(GAME_OVER, SCORE, all_barrels)
             if GAME_OVER == 0:
                 all_barrels.update()
             all_barrels.draw(screen)
+
+               
 
             if not game_won and GAME_OVER == 0 and mario.rect.colliderect(princess_rect):
                 princess_image = princess_love
@@ -412,15 +482,78 @@ while running:
                     pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
                     GAME_OVER = 0
 
+            next_state = get_state(
+                                mario,
+                                all_barrels,
+                                ladders,
+                                screen,
+                                CELL_SIZE,
+                                GRID_SIZE,
+                                ENV_GRID,
+                            )
+
+            next_state.extend([
+                int(mario.is_climbing),
+                int(canMarioClimb(ladders, mario.rect))
+            ])
+
+            reward = get_reward(
+                                    previous_score,
+                                    SCORE,
+                                    previous_lives,
+                                    LIVES,
+                                    GAME_OVER,
+                                )    
+            frame_count+=1
+            if frame_count % FRAME_SKIP == 0:
+                writer.writerow(state + [action, reward] + next_state)
+            previous_score = SCORE
+            previous_lives = LIVES
+
+    keys = pygame.key.get_pressed()
+
     if GAME_OVER == -2:
             show_end_screen("GAME OVER", "red")
+            if keys[pygame.K_RETURN]:
+                csv_file.close()
+                episode_num += 1
+                if episode_num >= MAX_EPISODES:
+                    running = False
+                else:
+                    csv_file, writer = new_csv_writer(episode_num)
+                    mario.reset(*MARIO_INITIAL)
+                    all_barrels.empty()
+                    LIVES = 3
+                    SCORE = 0
+                    GAME_OVER = 0
+                    previous_score = 0
+                    previous_lives = LIVES
+                    frame_count = 0
+                    pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
     elif GAME_OVER == 1:
             show_end_screen("YOU WIN!", "gold")
+            if keys[pygame.K_RETURN]:
+                csv_file.close()
+                episode_num += 1
+                if episode_num >= MAX_EPISODES:
+                    running = False
+                else:
+                    csv_file, writer = new_csv_writer(episode_num)
+                    mario.reset(*MARIO_INITIAL)
+                    all_barrels.empty()
+                    LIVES = 3
+                    SCORE = 0
+                    GAME_OVER = 0
+                    previous_score = 0
+                    previous_lives = LIVES
+                    frame_count = 0
+                    game_won = False
+                    princess_image = princess_help
+                    pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
     else:
             screen.blit(lives_text, (700, 10))
             score_text = font.render(f"Score: {SCORE}", True, "white")
             screen.blit(score_text, (10, 10))
-
     clock.tick(60)
     pygame.display.update()
  
