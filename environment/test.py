@@ -2,8 +2,8 @@
 import random
 import pygame
 from sys import exit
-from feature_extraction import get_state
-
+from feature_extraction import get_state, get_princess_features
+import numpy as np
 pygame.init()
 
 # init variables
@@ -75,7 +75,7 @@ ladders = [
 def canMarioClimb(ladders, rect):
     for ladder in ladders:
         ladder_center_x = ladder.centerx
-        if abs(rect.centerx - ladder_center_x) <= 6:
+        if abs(rect.centerx - ladder_center_x) <= 8:
             if ladder.top <= rect.bottom <= ladder.bottom :
                 return True
     return False
@@ -319,8 +319,42 @@ class Barrel(pygame.sprite.Sprite):
         else:
             self.on_ladder = False
          
+def get_action():
+    keys = pygame.key.get_pressed()
 
+    if keys[pygame.K_LEFT] and keys[pygame.K_SPACE]:
+        return 2      
 
+    elif keys[pygame.K_RIGHT] and keys[pygame.K_SPACE]:
+        return 3      
+
+    elif keys[pygame.K_LEFT]:
+        return 0      
+
+    elif keys[pygame.K_RIGHT]:
+        return 1      
+
+    elif keys[pygame.K_UP]:
+        return 4      
+
+    elif keys[pygame.K_DOWN]:
+        return 5      
+
+    return 6          # stand still
+
+def get_reward(previous_score, current_score, previous_lives, current_lives, game_over):
+    reward = 0
+
+    if current_score > previous_score:
+        reward += current_score - previous_score
+
+    if current_lives < previous_lives:
+        reward -= 100
+
+    if game_over == 1:
+        reward += 1000
+
+    return reward
 
 # donkeykong
 dk = pygame.transform.scale(pygame.image.load(sprites[11]), (60, 80))
@@ -344,14 +378,31 @@ all_barrels = pygame.sprite.Group()
 SPAWN_BARREL_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000)) 
 
+
+states = []
+actions = []
+rewards = []
+next_states = []
+
+episode_states = []
+episode_actions = []
+episode_rewards = []
+episode_next_states = []
+episode_ids = []
+
+episode_id = 0
+
+previous_score = SCORE
+previous_lives = LIVES
+
+
 running = True
 while running:
     lives_text=font.render(f"Lives: {LIVES}", True, "white")
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
+            running = False
         
         if event.type == SPAWN_BARREL_EVENT:
             new_barrel = Barrel(100,280)  # Spawn barrel at a fixed position (100, 100)
@@ -386,15 +437,19 @@ while running:
     #agent_grid(CELL_SIZE,ENV_GRID,mario,screen)
 
     state = get_state(mario, all_barrels, ladders,screen, CELL_SIZE, GRID_SIZE, ENV_GRID)
-    state.extend([int(mario.is_climbing),int(canMarioClimb(ladders,mario.rect))])
-    # print(len(state)) #to verify if %500
+    state.extend([int(mario.is_climbing),int(canMarioClimb(ladders,mario.rect)), mario.direction])
+    state.extend(get_princess_features(mario,princess_rect,W_WIDTH,W_HEIGHT))
+    #print(len(state)) #to verify if %502
+    action = get_action()
 
-    
+
     if GAME_OVER in (0, -1):
             GAME_OVER, SCORE = mario.update(GAME_OVER, SCORE, all_barrels)
             if GAME_OVER == 0:
                 all_barrels.update()
             all_barrels.draw(screen)
+
+               
 
             if not game_won and GAME_OVER == 0 and mario.rect.colliderect(princess_rect):
                 princess_image = princess_love
@@ -412,10 +467,98 @@ while running:
                     pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
                     GAME_OVER = 0
 
+            next_state = get_state(
+                                mario,
+                                all_barrels,
+                                ladders,
+                                screen,
+                                CELL_SIZE,
+                                GRID_SIZE,
+                                ENV_GRID,
+                            )
+
+            next_state.extend([
+                int(mario.is_climbing),
+                int(canMarioClimb(ladders, mario.rect)),
+                mario.direction
+            ])
+            next_state.extend(
+                get_princess_features(
+                    mario,
+                    princess_rect,
+                    W_WIDTH,
+                    W_HEIGHT
+                )
+            )
+
+            reward = get_reward(
+                                    previous_score,
+                                    SCORE,
+                                    previous_lives,
+                                    LIVES,
+                                    GAME_OVER,
+                                )    
+          
+            episode_states.append(state)
+            episode_actions.append(action)
+            episode_rewards.append(reward)
+            episode_next_states.append(next_state)
+
+            previous_score = SCORE
+            previous_lives = LIVES
+
     if GAME_OVER == -2:
             show_end_screen("GAME OVER", "red")
+            print(f"Episode {episode_id} failed - discarded.")
+
+            episode_id += 1
+
+            episode_states = []
+            episode_actions = []
+            episode_rewards = []
+            episode_next_states = []
+
+            GAME_OVER = 0
+            SCORE = 0
+            LIVES = 3
+            previous_score = 0
+            previous_lives = 3
+            game_won = False
+            princess_image = princess_help
+
+            mario.reset(*MARIO_INITIAL)
+            all_barrels.empty()
     elif GAME_OVER == 1:
             show_end_screen("YOU WIN!", "gold")
+            states.extend(episode_states)
+            actions.extend(episode_actions)
+            rewards.extend(episode_rewards)
+            next_states.extend(episode_next_states)
+
+            episode_ids.extend(
+                                [episode_id] * len(episode_states)
+                            )
+
+
+            print(f"Successful episode recorded!:{episode_id}")
+
+            episode_id += 1
+
+            episode_states = []
+            episode_actions = []
+            episode_rewards = []
+            episode_next_states = []
+
+            GAME_OVER = 0
+            SCORE = 0
+            LIVES = 3
+            previous_score = 0
+            previous_lives = 3
+            game_won = False
+            princess_image = princess_help
+
+            mario.reset(*MARIO_INITIAL)
+            all_barrels.empty()
     else:
             screen.blit(lives_text, (700, 10))
             score_text = font.render(f"Score: {SCORE}", True, "white")
@@ -423,4 +566,21 @@ while running:
 
     clock.tick(60)
     pygame.display.update()
+
+pygame.quit()
+
+print("Total transitions:", len(states))
+print("Total episode IDs:", len(episode_ids))
+print("Successful episodes:", np.unique(episode_ids))
+print("State length:", len(states[0]) if states else 0)
+print("Next state length:", len(next_states[0]) if next_states else 0)
+
+np.savez(
+    "dataset.npz",
+    states=np.array(states, dtype=np.float32),
+    actions=np.array(actions, dtype=np.int64),
+    rewards=np.array(rewards, dtype=np.float32),
+    next_states=np.array(next_states, dtype=np.float32),
+    episode_ids=np.array(episode_ids, dtype=np.int64)
+    )
  
