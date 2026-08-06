@@ -45,24 +45,24 @@ def action_to_keys(action):
     }
     if action == 0:      # left
         keys[pygame.K_LEFT] = True
-        print("left")
+        #print("left")
     elif action == 1:    # right
         keys[pygame.K_RIGHT] = True
-        print("right")
+        #print("right")
     elif action == 2:    # jump+left
         keys[pygame.K_LEFT] = True
         keys[pygame.K_SPACE] = True
-        print("leftjump")
+        #print("leftjump")
     elif action == 3:    # jump+right
         keys[pygame.K_RIGHT] = True
         keys[pygame.K_SPACE] = True
-        print("rightjump")
+        #print("rightjump")
     elif action == 4:    # up
         keys[pygame.K_UP] = True
-        print("up")
+        #print("up")
     elif action == 5:    # down
         keys[pygame.K_DOWN] = True
-        print("down") 
+        #print("down") 
         # else still
     return keys
 
@@ -453,6 +453,9 @@ pygame.time.set_timer(SPAWN_BARREL_EVENT, random.randint(2000, 5000))
 #loading policy for autoplay
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 policy = None
+
+
+
 if AUTOPLAY:
     policy = ActorCritic().to(device)
     policy.load_bc_weights(MODEL_PATH)
@@ -520,6 +523,11 @@ while running:
         mario.direction
     ])
 
+    current_state = state.copy()
+    previous_score = SCORE
+    previous_lives = LIVES
+
+
     # deciding action: model or user
     if AUTOPLAY:
         on_ladder_ranged = canMarioClimb(ladders, mario.rect)
@@ -575,8 +583,58 @@ while running:
                     GAME_OVER = 0
 
 
-            previous_score = SCORE
-            previous_lives = LIVES
+
+    # Calculate the state after taking the action
+    next_state = get_state(
+        mario,
+        all_barrels,
+        ladders,
+        screen,
+        CELL_SIZE,
+        GRID_SIZE,
+        ENV_GRID
+    )
+
+    pdx, pdy = get_princess_features(
+        mario,
+        princess_rect,
+        W_WIDTH,
+        W_HEIGHT
+    )
+
+    next_state.extend([
+        int(mario.is_climbing),
+        int(canMarioClimb(ladders, mario.rect)),
+        pdx,
+        pdy,
+        mario.direction
+    ])
+
+
+    reward = 0
+
+    if SCORE > previous_score:
+        reward += SCORE - previous_score
+
+    if LIVES < previous_lives:
+        reward -= 100
+
+    if GAME_OVER == 1:
+        reward += 1000
+
+    if GAME_OVER == -2:
+        reward -= 1000
+
+    done = GAME_OVER in (1, -2)
+
+    if autoplay_frame_count % 60 == 0:
+        print(
+            "State:", len(current_state),
+            "| Action:", action,
+            "| Reward:", reward,
+            "| Next state:", len(next_state),
+            "| Done:", done
+        )
 
     if GAME_OVER == -2:
             show_end_screen("GAME OVER", "red")
