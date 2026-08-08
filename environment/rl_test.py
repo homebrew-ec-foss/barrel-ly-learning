@@ -320,7 +320,12 @@ class Mario:
                 ):
                     SCORE += 100
                     barrel.scored = True
-            
+                    print(
+                    "BARREL SCORE +100",
+                    "| Mario:", self.rect.center,
+                    "| Barrel:", barrel.rect.center
+                )
+                            
 
 
 
@@ -459,14 +464,27 @@ policy = None
 if AUTOPLAY:
     policy = ActorCritic().to(device)
     policy.load_bc_weights(MODEL_PATH)
+    critic_optimizer = torch.optim.Adam(
+            policy.critic.parameters(),
+            lr=1e-4
+        )
+    actor_optimizer = torch.optim.Adam( policy.actor.parameters(), lr=1e-5 )
     policy.eval()
     print(f"Actor-Critic mode: Loaded BC weights from {MODEL_PATH}.")
+    
 
 previous_score = SCORE
 previous_lives = LIVES
 autoplay_frame_count = 0
-held_action = 6
 
+held_action = 0
+held_log_prob = None
+
+episode_reward = 0
+episode_number = 1
+
+initial_lives = LIVES
+episode_logged = False
 
 running = True
 while running:
@@ -534,7 +552,6 @@ while running:
         on_bridge = isOnBridge(bridges, mario.rect)
 
         if autoplay_frame_count % HOLD_FRAMES == 0:
-            with torch.no_grad():
                 state_t = torch.tensor(
                     state, dtype=torch.float32, device=device
                 ).unsqueeze(0)
@@ -548,7 +565,11 @@ while running:
                 probabilities = torch.softmax(logits, dim=-1)
                 distribution = torch.distributions.Categorical(probabilities)
 
-                held_action = distribution.sample().item()
+                action_tensor = distribution.sample()
+                held_action = action_tensor.item()
+
+                held_log_prob = distribution.log_prob(action_tensor)
+
         autoplay_frame_count += 1
         action = held_action
     else:
@@ -625,17 +646,93 @@ while running:
     if GAME_OVER == -2:
         reward -= 1000
 
+    episode_reward += reward
+
+    
     done = GAME_OVER in (1, -2)
 
-    if autoplay_frame_count % 60 == 0:
+    if done and not episode_logged:
+        lives_lost = initial_lives - LIVES
         print(
-            "State:", len(current_state),
-            "| Action:", action,
-            "| Reward:", reward,
-            "| Next state:", len(next_state),
-            "| Done:", done
-        )
+        f"Episode {episode_number} | "
+        f"Reward: {episode_reward} | "
+        f"Score: {SCORE} | "
+        f"Lives lost: {lives_lost} | "
+        f"Won: {GAME_OVER == 1}"
+    )
 
+        episode_logged = True
+    gamma = 0.99
+
+    current_state_t = torch.tensor(
+        current_state,
+        dtype=torch.float32,
+        device=device
+    ).unsqueeze(0)
+
+    next_state_t = torch.tensor(
+        next_state,
+        dtype=torch.float32,
+        device=device
+    ).unsqueeze(0)
+
+    _, current_value = policy(current_state_t)
+
+    with torch.no_grad():
+        _, next_value = policy(next_state_t)
+
+        if done:
+            td_target = torch.tensor(
+                [[reward]],
+                dtype=torch.float32,
+                device=device
+            )
+        else:
+            td_target = reward + gamma * next_value
+
+        td_error = td_target - current_value
+
+    # Critic tries to make V(s) closer to the TD target 
+    critic_loss = (td_target - current_value).pow(2).mean()
+
+    # Update Critic 
+    critic_optimizer.zero_grad() 
+     
+    critic_loss.backward() 
+    critic_optimizer.step()
+
+    #before = policy.actor.weight.detach().clone()
+
+    actor_loss = -held_log_prob * td_error.detach()
+
+    actor_optimizer.zero_grad()
+    actor_loss.backward()
+    actor_optimizer.step()
+
+    #after = policy.actor.weight.detach().clone()
+
+
+    #weight_change = torch.norm(after - before).item()
+
+    #print("Total Actor weight change:", weight_change)
+    
+    if autoplay_frame_count % 60 == 0:
+        """ print(
+            "Action:", action,
+            "Reward:", reward,
+            "V(s):", current_value.item(),
+            "V(s'):", next_value.item(),
+            "TD error:", td_error.item(),
+            "Done:", done
+        )"""
+        """print(
+            "Action:",
+            held_action,
+            "| Log prob:",
+            held_log_prob.item()
+        )
+        print("Requires grad:", held_log_prob.requires_grad)
+        """
     if GAME_OVER == -2:
             show_end_screen("GAME OVER", "red")
     elif GAME_OVER == 1:
